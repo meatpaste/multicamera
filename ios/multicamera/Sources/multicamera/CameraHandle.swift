@@ -24,6 +24,9 @@ class CameraHandle: NSObject {
   )
   private static var referenceCount = 0
   private var device: AVCaptureDevice?
+  /// Injected rather than real hardware, so it takes no orientation
+  /// correction — see `handleOrientationChange()`.
+  private var deviceIsInjected = false
 
   private static let captureCompressionQuality: CGFloat = 0.8
   private static let recognitionThrottleInterval: TimeInterval = 0.2
@@ -158,6 +161,7 @@ class CameraHandle: NSObject {
         showSimulatorWarning()
         return
       }
+      deviceIsInjected = true
     #endif
 
     Self.session.beginConfiguration()
@@ -365,6 +369,14 @@ class CameraHandle: NSObject {
 
   @objc private func handleOrientationChange() {
     DispatchQueue.main.async { [self] in
+      // The turns below undo a sensor's fixed landscape mounting. An injected
+      // feed has none, so correcting it introduces the error instead.
+      if self.deviceIsInjected {
+        self.quarterTurns = 0
+        self.onCameraUpdated()
+        return
+      }
+
       let windowScene =
         UIApplication.shared.connectedScenes.first as? UIWindowScene
 
@@ -410,6 +422,7 @@ class CameraHandle: NSObject {
     Self.session.commitConfiguration()
 
     self.device = nil
+    self.deviceIsInjected = false
     Self.referenceCount -= 1
     if Self.referenceCount == 0 {
       Self.session.stopRunning()
